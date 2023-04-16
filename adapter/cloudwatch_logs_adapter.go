@@ -17,6 +17,7 @@ type cloudWatchLogsAdapter struct {
 	cwLogsClient  *cloudwatchlogs.CloudWatchLogs
 	logGroupName  string
 	logStreamName string
+	sequenceToken *string
 }
 
 func NewCloudWatchLogsAdapter(cwLogsClient *cloudwatchlogs.CloudWatchLogs, logGroupName, logStreamName string) CloudWatchLogsAdapter {
@@ -29,19 +30,30 @@ func NewCloudWatchLogsAdapter(cwLogsClient *cloudwatchlogs.CloudWatchLogs, logGr
 
 func (a *cloudWatchLogsAdapter) PutLogEntry(logEntry *domain.LogEntry) error {
 	logMessage := formatLogEntry(logEntry)
+
 	input := &cloudwatchlogs.PutLogEventsInput{
 		LogGroupName:  aws.String(a.logGroupName),
 		LogStreamName: aws.String(a.logStreamName),
 		LogEvents: []*cloudwatchlogs.InputLogEvent{
 			{
 				Message:   aws.String(logMessage),
-				Timestamp: aws.Int64(logEntry.Timestamp.UnixNano() / int64(time.Millisecond)),
+				Timestamp: aws.Int64(time.Now().UnixNano() / int64(time.Millisecond)),
 			},
 		},
 	}
 
-	_, err := a.cwLogsClient.PutLogEvents(input)
-	return err
+	if a.sequenceToken != nil {
+		input.SequenceToken = a.sequenceToken
+	}
+
+	output, err := a.cwLogsClient.PutLogEvents(input)
+	if err != nil {
+		return err
+	}
+
+	a.sequenceToken = output.NextSequenceToken
+
+	return nil
 }
 
 func formatLogEntry(logEntry *domain.LogEntry) string {

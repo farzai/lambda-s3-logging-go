@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -34,12 +35,17 @@ func handleRequest(ctx context.Context, s3Event events.S3Event) {
 	logUsecase := usecase.NewLogUsecase(cwLogsAdapter)
 
 	for _, record := range s3Event.Records {
-		bucket := record.S3.Bucket.Name
-		key := record.S3.Object.Key
+		s3 := record.S3
+		bucket := s3.Bucket.Name
+		key, err := url.QueryUnescape(s3.Object.Key)
+		if err != nil {
+			log.Printf("Error decoding key: %v", err)
+			continue
+		}
 
 		downloadCount, size, err := s3Adapter.IncrementDownloadCount(bucket, key)
 		if err != nil {
-			log.Printf("Error processing record: %v", err)
+			log.Printf("Error processing record: Bucket: %s, Key: %s, Error: %v", bucket, key, err)
 			continue
 		}
 
